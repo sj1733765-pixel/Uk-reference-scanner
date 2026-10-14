@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#102b4e"><title>UK Reference Scanner — Test</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172a3d;background:#edf3f9}*{box-sizing:border-box}body{margin:0;padding:18px 14px 42px}main{max-width:600px;margin:auto}header{background:#102b4e;color:white;border-radius:18px;padding:20px;margin-bottom:15px}h1{font-size:23px;margin:0 0 7px}header p{margin:0;color:#d4e4f5;font-size:14px}.panel{background:white;border-radius:16px;padding:17px;margin:14px 0;box-shadow:0 2px 10px #1b3d6412}h2{font-size:17px;margin:0 0 12px}button{border:0;border-radius:11px;background:#1169b1;color:white;font-size:16px;font-weight:650;padding:13px 15px;cursor:pointer}button:disabled{opacity:.45}button.secondary{background:#e6eef7;color:#123b63}.actions{display:flex;gap:9px;flex-wrap:wrap}#reader{width:100%;overflow:hidden;border-radius:12px;background:#152536;min-height:0}#reader video{width:100%!important}#status{font-size:14px;color:#3d5a73;line-height:1.5;margin-top:11px}#ref{font-size:25px;font-weight:750;overflow-wrap:anywhere;letter-spacing:.4px;margin:8px 0 15px}#raw{white-space:pre-wrap;overflow-wrap:anywhere;background:#f2f6fa;border-radius:10px;padding:12px;font-size:12px;max-height:150px;overflow:auto}label{font-size:13px;font-weight:700;color:#4b657e}small{color:#587089;line-height:1.5;display:block}#history{padding-left:21px;margin:10px 0 0}#history li{padding:5px 0;overflow-wrap:anywhere}.hidden{display:none}#reader__scan_region img{display:none}#reader__dashboard{display:none!important}
+</style>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
+</head>
+<body><main>
+<header><h1>📦 UK Reference Scanner</h1><p>Standalone camera test • No login • No spreadsheet changes</p></header>
+<section class="panel"><h2>Scan from your iPhone</h2><div class="actions"><button id="start">📷 Start camera</button><button class="secondary" id="stop" disabled>Stop camera</button></div><p id="status" role="status">Point your iPhone camera at the barcode or QR code shown on your iPad. Camera permission is required.</p><div id="reader"></div><small>Tip: Enlarge the code on your iPad, increase its brightness and avoid reflections. Camera scanning requires an HTTPS page (or localhost).</small></section>
+<section class="panel"><h2>Latest reference</h2><label>EXTRACTED WAYBILL / BARCODE</label><div id="ref" aria-live="polite">—</div><div class="actions"><button id="copy" disabled>Copy reference</button><button class="secondary" id="clear">Clear results</button></div><details style="margin-top:15px"><summary>Show full raw scan (for testing)</summary><pre id="raw">No scan yet</pre></details></section>
+<section class="panel"><h2>Scanned references <span id="count">(0)</span></h2><small>Different references are collected here during this test. Repeat scans of the same reference are ignored.</small><ol id="history"></ol><div class="actions" style="margin-top:12px"><button class="secondary" id="copyall" disabled>Copy all references</button></div></section>
+<small>Privacy: This test reads codes locally in your browser. It does not send scanned content to a spreadsheet or our server. The scanning library loads from a third-party CDN. No results are saved when the page closes.</small>
+</main>
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+const $=id=>document.getElementById(id);let scanner=null,active=false,latest='',seen=new Set(),refs=[],lastRaw='',lastAt=0;
+function status(s){$('status').textContent=s}
+function extract(raw){let t=String(raw||'').trim();try{let obj=JSON.parse(t);if(obj&&typeof obj==='object'){let v=obj.Waybill??obj.waybill??obj.HAWB??obj.hawb??obj.Reference??obj.reference;if(v!==undefined&&v!==null)return String(v).trim()}}catch{}return t}
+function onScan(raw,format){let now=Date.now();if(raw===lastRaw&&now-lastAt<2500)return;lastRaw=raw;lastAt=now;let ref=extract(raw);if(!ref){status('Code found but no reference extracted.');return}latest=ref;$('ref').textContent=ref;$('raw').textContent='Format: '+(format?.result?.format?.formatName||'unknown')+'\n\n'+raw;$('copy').disabled=false;if(!seen.has(ref)){seen.add(ref);refs.push(ref);let li=document.createElement('li');li.textContent=ref;$('history').appendChild(li);$('count').textContent='('+refs.length+')';$('copyall').disabled=false;status('✓ Reference captured. You can scan another code.');if(navigator.vibrate)navigator.vibrate(70)}else status('✓ Reference recognised (already in list).')}
+$('start').onclick=async()=>{if(active)return;if(typeof Html5Qrcode==='undefined'){status('Scanner library did not load. Check your internet connection and reload.');return}try{scanner=new Html5Qrcode('reader',{verbose:false});await scanner.start({facingMode:'environment'},{fps:10,qrbox:(w,h)=>{let s=Math.floor(Math.min(w,h)*.85);return {width:s,height:Math.max(110,Math.floor(s*.6))}},aspectRatio:1.333},onScan,()=>{});active=true;$('start').disabled=true;$('stop').disabled=false;status('Camera running. Hold the code steady inside the preview.')}catch(e){status('Could not start camera: '+(e?.message||e)+'. Open this page over HTTPS in Safari and allow camera access.');try{await scanner?.clear()}catch{}scanner=null}};
+$('stop').onclick=async()=>{if(!scanner)return;try{if(active)await scanner.stop();await scanner.clear()}catch{}scanner=null;active=false;$('start').disabled=false;$('stop').disabled=true;status('Camera stopped.')};
+async function copy(t){try{await navigator.clipboard.writeText(t);status('✓ Copied to clipboard.')}catch{status('Copy was blocked. Touch and hold the reference to copy it manually.')}}
+$('copy').onclick=()=>copy(latest);$('copyall').onclick=()=>copy(refs.join('\n'));
+$('clear').onclick=()=>{seen.clear();refs=[];latest='';lastRaw='';$('ref').textContent='—';$('raw').textContent='No scan yet';$('history').replaceChildren();$('count').textContent='(0)';$('copy').disabled=true;$('copyall').disabled=true;status(active?'Results cleared. Camera is still running.':'Results cleared. Ready to scan.')};
+});
+</script>
+</body></html>
